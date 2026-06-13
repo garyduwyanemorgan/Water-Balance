@@ -322,7 +322,11 @@ with st.sidebar:
     fDP = st.slider("Irrigation deep-percolation — VADOSE ZONE (%)", 0, 100,
                     int(DEFAULTS["fDP"] * 100), key="fDP") / 100
     fLeak = st.slider("Leakage reaching water table (%)", 0, 100,
-                      int(DEFAULTS["fLeak"] * 100), key="fLeak") / 100
+                      int(DEFAULTS["fLeak"] * 100), key="fLeak",
+                      help="Regime-dependent (Peche et al. 2026): in hydraulically *disconnected* "
+                           "conditions (deep water table) the flux is pinned by pipe + colmation, "
+                           "not by this fraction; in *connected* conditions (Dubai's rising-GW "
+                           "regime) it couples nonlinearly to the water table.") / 100
     fLag = st.slider("Washout-lagoon infiltration (%)", 0, 100,
                      int(DEFAULTS["fLag"] * 100), key="fLag") / 100
     injS = st.number_input("ASR / injection — summer (m³/day)", min_value=0,
@@ -390,6 +394,12 @@ st.markdown(
     f"**{ratio}** the largest of the other levers. This single unmeasured parameter dominates how "
     f"much TSE reaches the ground, which is why FAH resolves it with **HYDRUS-1D vadose columns over "
     f"Sabkha retention curves** rather than assuming a number.")
+st.caption(
+    "Independent support — [Peche et al. (2026, *Groundwater*)](https://doi.org/10.1111/gwat.70083) "
+    "show numerically that the leaky-sewer → groundwater flux is **regime-dependent**: constant when "
+    "the water table sits below a soil-specific disconnection depth (≈ 0.89 m sand / 1.77 m loamy "
+    "sand / 4.00 m sandy loam), and nonlinearly coupled to the water table above it. Dubai's "
+    "rising-GW regime is the latter — the leakage term here is therefore time-varying, not a fixed fraction.")
 
 st.divider()
 

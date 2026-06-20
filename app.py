@@ -72,6 +72,34 @@ RANGES = {
                   note="Moderate; lagoons are only active in the 2021 base year."),
 }
 
+# --------------------------------------------------------------------------- #
+# HYPAGS K → α → fDP estimator  (Peche et al. 2023, Groundwater 62:469-479)
+# --------------------------------------------------------------------------- #
+# 95% CI error bounds on α, Table 2 — [(K_upper, lo_err, hi_err), ...] in m⁻¹
+_ALPHA_CI = [
+    (2.5e-7, 1.144, 3.002), (5e-7,  1.258, 5.364), (7.5e-7, 1.366, 7.031),
+    (1e-6,   1.519, 6.728), (2.5e-6, 2.072, 6.758), (5e-6,  2.393, 6.607),
+    (7.5e-6, 2.985, 5.910), (1e-5,   3.229, 5.643), (2.5e-5, 4.000, 4.840),
+    (5e-5,   4.233, 4.082), (7.5e-5, 4.486, 3.182), (1e-4,   5.030, 3.051),
+    (5e-4,   5.483, 3.442), (float("inf"), 2.858, 1.811),
+]
+
+def _hypags_alpha(K: float) -> tuple[float, float, float]:
+    """(alpha_mean, alpha_lo, alpha_hi) in m⁻¹.
+    Mean: power-law α = 694·K^0.4 calibrated to Carsel & Parrish (1988) data.
+    CI: Peche et al. (2023) Table 2, 95% confidence interval by K class.
+    """
+    am = 694.0 * (K ** 0.4)
+    lo_e, hi_e = next((lo, hi) for kmax, lo, hi in _ALPHA_CI if K <= kmax)
+    return am, max(0.05, am - lo_e), am + hi_e
+
+def _alpha_to_fdp(alpha: float) -> float:
+    """fDP = 0.10 × α  (calibrated: α = 2 m⁻¹ → fDP = 20%, matching FAH default).
+    Physical basis: α is the inverse of the air-entry pressure head; higher α
+    → faster gravitational drainage → more deep percolation.
+    """
+    return max(0.03, min(0.50, 0.10 * alpha))
+
 # Palette (matches the companion HTML / Excel deliverables)
 C = dict(navy="#1F4E79", blue="#2E5496", grey="#595959", aquifer="#0E7C7B",
          consumed="#8C8C8C", discharged="#5B9BD5", banked="#7E57C2",
@@ -333,6 +361,61 @@ with st.sidebar:
                            value=0, step=1000, key="injS")
     injW = st.number_input("ASR / injection — winter (m³/day)", min_value=0,
                            value=0, step=1000, key="injW")
+    st.divider()
+    with st.expander("🔬 HYPAGS K → fDP estimator"):
+        st.caption(
+            "Estimate fDP uncertainty from site K (m/s) via the "
+            "[Peche et al. (2023)](https://doi.org/10.1111/gwat.13365) "
+            "α = f(K) model; uncertainty from their Table 2 (95% CI).  \n"
+            "[Open HYPAGS tool ↗](https://apeche.github.io/HYPAGS.html)")
+        k_fill   = st.number_input("Engineered fill K (m/s)", value=1e-5,
+                                    min_value=1e-12, max_value=1.0, format="%.2e",
+                                    help="Typical Dubai fill: 10⁻⁵–10⁻⁴ m/s", key="k_fill")
+        k_sand   = st.number_input("Aeolian sand K (m/s)", value=1e-6,
+                                    min_value=1e-12, max_value=1.0, format="%.2e",
+                                    help="Typical: 10⁻⁶–10⁻⁵ m/s", key="k_sand")
+        k_sabkha = st.number_input("Sabkha K (m/s)", value=1e-7,
+                                    min_value=1e-12, max_value=1.0, format="%.2e",
+                                    help="Salt-cemented silt: 10⁻⁸–10⁻⁶ m/s", key="k_sabkha")
+
+        import pandas as pd
+        tbl_rows = []
+        for name, K in [("Fill (0–2 m)", k_fill), ("Aeolian sand (2–5 m)", k_sand),
+                         ("Sabkha", k_sabkha)]:
+            am, alo, ahi = _hypags_alpha(K)
+            tbl_rows.append({"Layer": name, "K (m/s)": f"{K:.1e}",
+                             "α mean": f"{am:.2f} m⁻¹",
+                             "α 95 % CI": f"{alo:.2f} – {ahi:.2f} m⁻¹",
+                             "fDP mid": f"{_alpha_to_fdp(am)*100:.0f}%"})
+        st.dataframe(pd.DataFrame(tbl_rows), hide_index=True, use_container_width=True)
+
+        ctl_name, k_ctl = min(
+            [("Fill", k_fill), ("Aeolian sand", k_sand), ("Sabkha", k_sabkha)],
+            key=lambda x: x[1])
+        am_c, alo_c, ahi_c = _hypags_alpha(k_ctl)
+        fdp_lo_s  = _alpha_to_fdp(alo_c)
+        fdp_hi_s  = _alpha_to_fdp(ahi_c)
+        fdp_mid_s = _alpha_to_fdp(am_c)
+
+        st.markdown(
+            f"**Bottleneck layer: {ctl_name}** (K = {k_ctl:.1e} m/s)  \n"
+            f"α = {am_c:.2f} m⁻¹ &nbsp;[95 % CI: {alo_c:.2f} – {ahi_c:.2f}]  \n"
+            f"→ **Suggested fDP: {fdp_lo_s*100:.0f}% – {fdp_hi_s*100:.0f}%** "
+            f"(midpoint {fdp_mid_s*100:.0f}%)")
+
+        col_a, col_b = st.columns(2)
+        with col_a:
+            if st.button("Apply midpoint to fDP slider", key="apply_fdp"):
+                st.session_state["fDP"] = int(round(fdp_mid_s * 100))
+                st.rerun()
+        with col_b:
+            st.markdown("[Verify in HYPAGS ↗](https://apeche.github.io/HYPAGS.html)")
+
+        st.caption(
+            "α = 694 × K^0.4 (power-law calibrated to Carsel & Parrish 1988 texture classes). "
+            "fDP = 0.10 × α_bottleneck. "
+            "The lowest-K layer (Sabkha) restricts percolation for the whole column.")
+
     st.caption("Source: IR 222 Phase 2 Final Report (707883JA-P3-GE-REP-0001, "
                "Jul 2022), Tables 2-2 & 2-3 (Jacobs/Halcrow for Dubai Municipality).")
 

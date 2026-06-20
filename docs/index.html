@@ -55,7 +55,23 @@
   .badge.pass{background:#E3F4E6;color:#2E7D32;border:1px solid #b6e0bd;}
   .badge.fail{background:#FBE5E3;color:#C0392B;border:1px solid #e7b4ae;}
   text{font-family:Arial,Helvetica,sans-serif;}
-  @media(max-width:980px){.kpis{grid-template-columns:repeat(2,1fr)}.cols{grid-template-columns:1fr}.twocol{grid-template-columns:1fr}}
+  .hyp-section{margin-top:14px;border-top:1px solid #e6ebf1;padding-top:12px;}
+  .hyp-toggle{background:none;border:1px solid #cfd8e3;border-radius:8px;padding:5px 10px;font-size:12.5px;cursor:pointer;color:var(--navy);margin-bottom:8px;}
+  .hyp-body{display:none;}
+  .hyp-body.open{display:block;}
+  .hyp-row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin:8px 0;}
+  .hyp-row label{font-size:12px;color:var(--grey);}
+  .hyp-row input{width:100%;padding:4px 6px;border:1px solid #cfd8e3;border-radius:6px;font-size:13px;}
+  .hyp-tbl{width:100%;border-collapse:collapse;font-size:12px;margin:8px 0;}
+  .hyp-tbl th{background:#f0f4f8;padding:4px 6px;text-align:left;font-weight:bold;color:var(--grey);}
+  .hyp-tbl td{padding:4px 6px;border-top:1px solid #e6ebf1;}
+  .hyp-tbl tr:nth-child(3){background:#FFF8E6;}
+  .hyp-result{font-size:13px;margin:8px 0;padding:8px 10px;background:#F0FAF9;border:1px solid var(--aquifer);border-radius:8px;color:#0E7C7B;}
+  .hyp-btns{display:flex;gap:8px;margin-top:8px;}
+  .hyp-apply{padding:6px 12px;background:var(--aquifer);color:#fff;border:0;border-radius:7px;cursor:pointer;font-size:12.5px;font-weight:bold;}
+  .hyp-link{padding:6px 12px;background:#fff;border:1px solid var(--aquifer);color:var(--aquifer);border-radius:7px;font-size:12.5px;text-decoration:none;display:inline-block;}
+  .hyp-note{font-size:11.5px;color:var(--grey);margin-top:8px;font-style:italic;}
+  @media(max-width:980px){.kpis{grid-template-columns:repeat(2,1fr)}.cols{grid-template-columns:1fr}.twocol{grid-template-columns:1fr}.hyp-row{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
@@ -118,6 +134,27 @@
         <div class="slider"><label>ASR / injection — winter (m³/day) <input class="numin" type="number" id="injW" min="0" step="1000"></label></div>
         <button class="resetbtn" id="resetAsum">Reset to defaults</button>
         <div class="disclaim">These fractions are FAH analytical assumptions, not IR 222 data. IR 222 contains no recharge, vadose-zone or subsurface accounting. Adjust to run scenarios — the tornado above updates to reflect the levers you set.</div>
+
+        <div class="hyp-section">
+          <button class="hyp-toggle" id="hypToggle">🔬 HYPAGS K → fDP estimator</button>
+          <div class="hyp-body" id="hypBody">
+            <p style="font-size:12.5px;color:var(--grey);margin:0 0 8px">Estimate the fDP uncertainty range from site hydraulic conductivity K, using the <a href="https://doi.org/10.1111/gwat.13365" target="_blank" style="color:var(--aquifer)">Peche et al. (2023)</a> α = f(K) model with 95% CI bounds (Table 2).</p>
+            <div class="hyp-row">
+              <div><label>Engineered fill K (m/s)<br><small style="color:var(--grey)">typical 10⁻⁵–10⁻⁴</small></label><input type="number" id="kFill" value="0.00001" step="any" oninput="runHYPAGS()"></div>
+              <div><label>Aeolian sand K (m/s)<br><small style="color:var(--grey)">typical 10⁻⁶–10⁻⁵</small></label><input type="number" id="kSand" value="0.000001" step="any" oninput="runHYPAGS()"></div>
+              <div><label>Sabkha K (m/s)<br><small style="color:var(--grey)">salt-cemented: 10⁻⁸–10⁻⁶</small></label><input type="number" id="kSabkha" value="0.0000001" step="any" oninput="runHYPAGS()"></div>
+            </div>
+            <table class="hyp-tbl" id="hypTbl">
+              <tr><th>Layer</th><th>K (m/s)</th><th>α mean (m⁻¹)</th><th>α 95% CI (m⁻¹)</th><th>fDP mid</th></tr>
+            </table>
+            <div class="hyp-result" id="hypResult">Enter K values above to compute.</div>
+            <div class="hyp-btns">
+              <button class="hyp-apply" id="hypApply" onclick="applyHYPAGS()">Apply midpoint to fDP slider</button>
+              <a class="hyp-link" href="https://apeche.github.io/HYPAGS.html" target="_blank">Verify in HYPAGS ↗</a>
+            </div>
+            <p class="hyp-note">α = 694 × K^0.4 (calibrated to Carsel & Parrish 1988 texture classes). fDP = 0.10 × α_bottleneck. The lowest-K layer (Sabkha) restricts percolation for the whole column — it is the controlling uncertainty.</p>
+          </div>
+        </div>
       </div>
       <p id="asumHint" style="font-size:13px;color:var(--grey)">Click “FAH assumptions” above to open the scenario sliders.</p>
     </div>
@@ -208,6 +245,54 @@ function syncAsumInputs(){fLeak.value=state.a.fLeak*100;fDP.value=state.a.fDP*10
   vLeak.textContent=Math.round(state.a.fLeak*100)+"%";vDP.textContent=Math.round(state.a.fDP*100)+"%";vLag.textContent=Math.round(state.a.fLag*100)+"%";
   injS.value=state.a.injSummer;injW.value=state.a.injWinter;}
 document.getElementById("resetAsum").onclick=()=>{state.a=Object.assign({},DEFAULTS);syncAsumInputs();render();};
+
+// ---------- HYPAGS K → α → fDP (Peche et al. 2023, Table 1 & 2) ----------
+const ALPHA_CI=[
+  [2.5e-7,1.144,3.002],[5e-7,1.258,5.364],[7.5e-7,1.366,7.031],
+  [1e-6,1.519,6.728],[2.5e-6,2.072,6.758],[5e-6,2.393,6.607],
+  [7.5e-6,2.985,5.910],[1e-5,3.229,5.643],[2.5e-5,4.000,4.840],
+  [5e-5,4.233,4.082],[7.5e-5,4.486,3.182],[1e-4,5.030,3.051],
+  [5e-4,5.483,3.442],[Infinity,2.858,1.811]
+];
+function hypAlpha(K){
+  const am=694.0*Math.pow(K,0.4);
+  const [,lo_e,hi_e]=ALPHA_CI.find(([km])=>K<=km)||[null,2.858,1.811];
+  return{mean:am,lo:Math.max(0.05,am-lo_e),hi:am+hi_e};
+}
+function alphaToFdp(a){return Math.max(0.03,Math.min(0.50,0.10*a));}
+let _hypFdpMid=0.20;
+function runHYPAGS(){
+  const kFill=parseFloat(document.getElementById("kFill").value)||1e-5;
+  const kSand=parseFloat(document.getElementById("kSand").value)||1e-6;
+  const kSabkha=parseFloat(document.getElementById("kSabkha").value)||1e-7;
+  const layers=[["Fill (0–2 m)",kFill],["Aeolian sand (2–5 m)",kSand],["Sabkha",kSabkha]];
+  let tbl='<tr><th>Layer</th><th>K (m/s)</th><th>α mean (m⁻¹)</th><th>α 95% CI (m⁻¹)</th><th>fDP mid</th></tr>';
+  layers.forEach(([name,K],i)=>{
+    const {mean,lo,hi}=hypAlpha(K);
+    const bg=i===2?'style="background:#FFF8E6"':'';
+    tbl+=`<tr ${bg}><td>${name}</td><td>${K.toExponential(1)}</td><td>${mean.toFixed(2)}</td><td>${lo.toFixed(2)} – ${hi.toFixed(2)}</td><td>${(alphaToFdp(mean)*100).toFixed(0)}%</td></tr>`;
+  });
+  document.getElementById("hypTbl").innerHTML=tbl;
+  const [ctlName,kCtl]=layers.reduce((a,b)=>b[1]<a[1]?b:a);
+  const {mean,lo,hi}=hypAlpha(kCtl);
+  _hypFdpMid=alphaToFdp(mean);
+  const fdpLo=alphaToFdp(lo),fdpHi=alphaToFdp(hi);
+  document.getElementById("hypResult").innerHTML=
+    `<b>Bottleneck layer: ${ctlName}</b> (K = ${kCtl.toExponential(1)} m/s)<br>`+
+    `α = ${mean.toFixed(2)} m⁻¹ &nbsp;[95% CI: ${lo.toFixed(2)} – ${hi.toFixed(2)} m⁻¹]<br>`+
+    `→ Suggested fDP: <b>${(fdpLo*100).toFixed(0)}% – ${(fdpHi*100).toFixed(0)}%</b> (midpoint ${(_hypFdpMid*100).toFixed(0)}%)`;
+}
+function applyHYPAGS(){
+  state.a.fDP=_hypFdpMid;
+  document.getElementById("fDP").value=Math.round(_hypFdpMid*100);
+  document.getElementById("vDP").textContent=Math.round(_hypFdpMid*100)+"%";
+  render();
+}
+document.getElementById("hypToggle").onclick=()=>{
+  const b=document.getElementById("hypBody");
+  b.classList.toggle("open");
+  if(b.classList.contains("open"))runHYPAGS();
+};
 
 // ---------- tooltip ----------
 const tip=document.getElementById("tip");
